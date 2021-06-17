@@ -18,6 +18,7 @@ public class Client extends JFrame {
 		in = new DataInputStream(socket.getInputStream());
 
 		setSize(300, 300);
+		setDefaultCloseOperation(3);
 		JPanel panel = new JPanel(new GridLayout(2, 1));
 
 		JButton btnSend = new JButton("SEND");
@@ -28,9 +29,16 @@ public class Client extends JFrame {
 			// download img.png
 			String[] cmd = textField.getText().split(" ");
 			if ("upload".equals(cmd[0])) {
+				textField.setText("");
 				sendFile(cmd[1]);
 			} else if ("download".equals(cmd[0])) {
+				textField.setText("");
 				getFile(cmd[1]);
+			}
+			else {
+				String msg = textField.getText();
+				textField.setText("");
+				sendMessage(msg);
 			}
 		});
 
@@ -49,38 +57,68 @@ public class Client extends JFrame {
 		setVisible(true);
 	}
 
-	private void getFile(String s) {
-		// TODO: 14.06.2021  
+	private void getFile(String filename) {
+		// TODO: 14.06.2021
+		try {
+			out.writeUTF("download");
+			out.writeUTF(filename);
+			String serverAck = in.readUTF();
+			if("exists".equals(serverAck)) {
+				File file = new File("client"+File.separator+filename);
+				if(!file.exists()){
+					file.createNewFile();
+				}
+				FileOutputStream fos = new FileOutputStream(file);
+				long size = in.readLong();
+				byte[] buffer = new byte[1024];
+				for (int i = 0; i <= size / (buffer.length); i++) {
+					int read = in.read(buffer);
+					fos.write(buffer, 0, read);
+				}
+				System.out.println("Downloading file: "+file.getName()+" - completed");
+				out.writeUTF(file.getName()+" - downloaded");
+				fos.close();
+			}
+			else{
+				System.out.println(serverAck);
+			}
+		} catch (IOException e) {
+			try {
+				out.writeUTF("FATAL ERROR");
+			} catch (IOException io) {
+				io.printStackTrace();
+			}
+		}
 	}
 
 	private void sendFile(String filename) {
 		try {
 			File file = new File("client" + File.separator + filename);
-			if (!file.exists()) {
-				throw  new FileNotFoundException();
+			if (file.exists()) {
+				long fileLength = file.length();
+				FileInputStream fis = new FileInputStream(file);
+
+				out.writeUTF("upload");
+				out.writeUTF(filename);
+				out.writeLong(fileLength);
+
+				int read = 0;
+				byte[] buffer = new byte[8 * 1024];
+				while ((read = fis.read(buffer)) != -1) {
+					out.write(buffer, 0, read);
+				}
+
+				out.flush();
+				String status = in.readUTF();
+				fis.close();
+				System.out.println("sending status: " + status);
+			}
+			else{
+				System.out.println("File "+file.getName() + " not found on a client");
+				out.writeUTF("File "+file.getName()+" can't be uploaded, it can't be found on a client");
 			}
 
-			long fileLength = file.length();
-			FileInputStream fis = new FileInputStream(file);
-
-			out.writeUTF("upload");
-			out.writeUTF(filename);
-			out.writeLong(fileLength);
-
-			int read = 0;
-			byte[] buffer = new byte[8 * 1024];
-			while ((read = fis.read(buffer)) != -1) {
-				out.write(buffer, 0, read);
-			}
-
-			out.flush();
-
-			String status = in.readUTF();
-			System.out.println("sending status: " + status);
-
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
+		}  catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
